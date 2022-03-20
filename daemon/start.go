@@ -19,6 +19,7 @@ func (daemon *Daemon) ContainerStart(name string, hostConfig *containertypes.Hos
 		return errdefs.InvalidParameter(errors.New("checkpoint is only supported in experimental mode"))
 	}
 
+	// 根据容器名，从内存中获得容器实例
 	ctr, err := daemon.GetContainer(name)
 	if err != nil {
 		return err
@@ -98,6 +99,7 @@ func (daemon *Daemon) ContainerStart(name string, hostConfig *containertypes.Hos
 // container needs, such as storage and networking, as well as links
 // between containers. The container is left waiting for a signal to
 // begin running.
+// 启动容器
 func (daemon *Daemon) containerStart(container *container.Container, checkpoint string, checkpointDir string, resetRestartManager bool) (err error) {
 	start := time.Now()
 	container.Lock()
@@ -142,14 +144,17 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 		}
 	}()
 
+	// 容器挂载卷
 	if err := daemon.conditionalMountOnStart(container); err != nil {
 		return err
 	}
 
+	// 初始化容器网络
 	if err := daemon.initializeNetworking(container); err != nil {
 		return err
 	}
 
+	// runc runtime的容器配置
 	spec, err := daemon.createSpec(container)
 	if err != nil {
 		return errdefs.System(err)
@@ -171,6 +176,7 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 		}
 	}
 
+	// 从容器实例中获得containerd需要的配置
 	shim, createOptions, err := daemon.getLibcontainerdCreateOptions(container)
 	if err != nil {
 		return err
@@ -178,6 +184,7 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 
 	ctx := context.TODO()
 
+	// 调用containerd，创建容器
 	err = daemon.containerd.Create(ctx, container.ID, spec, shim, createOptions)
 	if err != nil {
 		if errdefs.IsConflict(err) {
@@ -195,10 +202,12 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 	}
 
 	// TODO(mlaventure): we need to specify checkpoint options here
+	// 调用containerd，启动容器。启动成功会返回进程id
 	pid, err := daemon.containerd.Start(context.Background(), container.ID, checkpointDir,
 		container.StreamConfig.Stdin() != nil || container.Config.Tty,
 		container.InitializeStdio)
 	if err != nil {
+		// 调用containerd启动容器失败，调用containerd删除容器
 		if err := daemon.containerd.Delete(context.Background(), container.ID); err != nil {
 			logrus.WithError(err).WithField("container", container.ID).
 				Error("failed to delete failed start container")
@@ -206,12 +215,14 @@ func (daemon *Daemon) containerStart(container *container.Container, checkpoint 
 		return translateContainerdStartErr(container.Path, container.SetExitCode, err)
 	}
 
+	// 容器状态为running
 	container.SetRunning(pid, true)
 	container.HasBeenStartedBefore = true
 	daemon.setStateCounter(container)
 
 	daemon.initHealthMonitor(container)
 
+	// 更新容器信息
 	if err := container.CheckpointTo(daemon.containersReplica); err != nil {
 		logrus.WithError(err).WithField("container", container.ID).
 			Errorf("failed to store container")

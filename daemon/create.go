@@ -55,6 +55,7 @@ func (daemon *Daemon) ContainerCreateIgnoreImagesArgsEscaped(params types.Contai
 		ignoreImagesArgsEscaped: true})
 }
 
+// 创建容器
 func (daemon *Daemon) containerCreate(opts createOpts) (containertypes.ContainerCreateCreatedBody, error) {
 	start := time.Now()
 	if opts.params.Config == nil {
@@ -65,12 +66,13 @@ func (daemon *Daemon) containerCreate(opts createOpts) (containertypes.Container
 	var img *image.Image
 	if opts.params.Config.Image != "" {
 		var err error
+		// 根据镜像名/镜像id 获取镜像config
 		img, err = daemon.imageService.GetImage(opts.params.Config.Image, opts.params.Platform)
 		if err == nil {
 			os = img.OS
 		}
 	}
-
+	// 检查容器配置、host配置
 	warnings, err := daemon.verifyContainerSettings(os, opts.params.HostConfig, opts.params.Config, false)
 	if err != nil {
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, errdefs.InvalidParameter(err)
@@ -89,6 +91,7 @@ func (daemon *Daemon) containerCreate(opts createOpts) (containertypes.Container
 		}
 	}
 
+	// 检查网络配置
 	err = verifyNetworkingConfig(opts.params.NetworkingConfig)
 	if err != nil {
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, errdefs.InvalidParameter(err)
@@ -102,6 +105,7 @@ func (daemon *Daemon) containerCreate(opts createOpts) (containertypes.Container
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, errdefs.InvalidParameter(err)
 	}
 
+	// 创建容器
 	ctr, err := daemon.create(opts)
 	if err != nil {
 		return containertypes.ContainerCreateCreatedBody{Warnings: warnings}, err
@@ -165,6 +169,7 @@ func (daemon *Daemon) create(opts createOpts) (retC *container.Container, retErr
 		return nil, errdefs.InvalidParameter(err)
 	}
 
+	// 创建container实例
 	if ctr, err = daemon.newContainer(opts.params.Name, os, opts.params.Config, opts.params.HostConfig, imgID, opts.managed); err != nil {
 		return nil, err
 	}
@@ -183,6 +188,7 @@ func (daemon *Daemon) create(opts createOpts) (retC *container.Container, retErr
 	ctr.HostConfig.StorageOpt = opts.params.HostConfig.StorageOpt
 
 	// Set RWLayer for container after mount labels have been set
+	// 创建init层、读写层
 	rwLayer, err := daemon.imageService.CreateLayer(ctr, setupInitLayer(daemon.idMapping))
 	if err != nil {
 		return nil, errdefs.System(err)

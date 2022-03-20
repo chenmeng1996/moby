@@ -42,6 +42,7 @@ type store struct {
 	// stored.
 	jsonPath string
 	// Repositories is a map of repositories, indexed by name.
+	// key: 镜像名，value: 镜像标签到镜像digest的映射。持久化道磁盘的repository.json文件
 	Repositories map[string]repository
 	// referencesByIDCache is a cache of references indexed by ID, to speed
 	// up References.
@@ -223,6 +224,7 @@ func (store *store) Delete(ref reference.Named) (bool, error) {
 }
 
 // Get retrieves an item from the store by reference
+// 根据镜像名查找镜像id
 func (store *store) Get(ref reference.Named) (digest.Digest, error) {
 	if canonical, ok := ref.(reference.Canonical); ok {
 		// If reference contains both tag and digest, only
@@ -250,6 +252,7 @@ func (store *store) Get(ref reference.Named) (digest.Digest, error) {
 		return "", ErrDoesNotExist
 	}
 
+	// 从repository，查找镜像名对应的镜像id
 	id, exists := repository[refStr]
 	if !exists {
 		return "", ErrDoesNotExist

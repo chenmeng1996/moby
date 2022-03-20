@@ -190,6 +190,7 @@ func (cli *DaemonCli) start(opts *daemonOptions) (err error) {
 		logrus.Fatalf("Error creating middlewares: %v", err)
 	}
 
+	// daemon实例
 	d, err := daemon.NewDaemon(ctx, cli.Config, pluginStore)
 	if err != nil {
 		return errors.Wrap(err, "failed to start daemon")
@@ -236,6 +237,7 @@ func (cli *DaemonCli) start(opts *daemonOptions) (err error) {
 	// The serve API routine never exits unless an error occurs
 	// We need to start it as a goroutine and wait on it so
 	// daemon doesn't exit
+	// 启动http server
 	serveAPIWait := make(chan error)
 	go cli.api.Wait(serveAPIWait)
 

@@ -59,6 +59,7 @@ type nameAssociation struct {
 }
 
 // ViewDB provides an in-memory transactional (ACID) container Store
+// 在内存存储所有container信息。提供事务的ACID。
 type ViewDB interface {
 	Snapshot() View
 	Save(*Container) error

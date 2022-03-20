@@ -149,6 +149,7 @@ func (i *ImageService) manifestMatchesPlatform(img *image.Image, platform specs.
 }
 
 // GetImage returns an image corresponding to the image referred to by refOrID.
+// 根据镜像名/镜像id 获取镜像config
 func (i *ImageService) GetImage(refOrID string, platform *specs.Platform) (retImg *image.Image, retErr error) {
 	defer func() {
 		if retErr != nil || retImg == nil || platform == nil {
@@ -182,23 +183,28 @@ func (i *ImageService) GetImage(refOrID string, platform *specs.Platform) (retIm
 		//   able to automatically tell what causes the conflict.
 		retErr = errdefs.NotFound(errors.Errorf("image with reference %s was found but does not match the specified platform: wanted %s, actual: %s", refOrID, platforms.Format(p), platforms.Format(imgPlat)))
 	}()
+	// 镜像名或镜像digest的解析
 	ref, err := reference.ParseAnyReference(refOrID)
 	if err != nil {
 		return nil, errdefs.InvalidParameter(err)
 	}
+
 	namedRef, ok := ref.(reference.Named)
 	if !ok {
 		digested, ok := ref.(reference.Digested)
 		if !ok {
 			return nil, ErrImageDoesNotExist{ref}
 		}
+		// 如果镜像名带digest，从digest中获取id
 		id := image.IDFromDigest(digested.Digest())
+		// 根据镜像id查找image config
 		if img, err := i.imageStore.Get(id); err == nil {
 			return img, nil
 		}
 		return nil, ErrImageDoesNotExist{ref}
 	}
 
+	// 如果镜像名不带digest，从镜像名查找镜像id，然后根据镜像id查找镜像config
 	if digest, err := i.referenceStore.Get(namedRef); err == nil {
 		// Search the image stores to get the operating system, defaulting to host OS.
 		id := image.IDFromDigest(digest)

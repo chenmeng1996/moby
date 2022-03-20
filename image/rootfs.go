@@ -44,6 +44,7 @@ func (r *RootFS) Clone() *RootFS {
 }
 
 // ChainID returns the ChainID for the top layer in RootFS.
+// rootfs的最顶层的chainID
 func (r *RootFS) ChainID() layer.ChainID {
 	if runtime.GOOS == "windows" && r.Type == typeLayersWithBase {
 		logrus.Warnf("Layer type is unsupported on this platform. DiffIDs: '%v'", r.DiffIDs)

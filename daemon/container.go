@@ -125,6 +125,7 @@ func (daemon *Daemon) Register(c *container.Container) error {
 	return c.CheckpointTo(daemon.containersReplica)
 }
 
+// 创建container实例
 func (daemon *Daemon) newContainer(name string, operatingSystem string, config *containertypes.Config, hostConfig *containertypes.HostConfig, imgID image.ID, managed bool) (*container.Container, error) {
 	var (
 		id             string

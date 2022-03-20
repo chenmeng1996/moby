@@ -18,6 +18,7 @@ var (
 	validContainerNamePattern = names.RestrictedNamePattern
 )
 
+// 容器信息加载到内存中
 func (daemon *Daemon) registerName(container *container.Container) error {
 	if daemon.Exists(container.ID) {
 		return fmt.Errorf("Container is already loaded")

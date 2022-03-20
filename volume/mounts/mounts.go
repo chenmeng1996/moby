@@ -20,6 +20,7 @@ import (
 //
 // Note that this type is embedded in `container.Container` object and persisted to disk.
 // Changes to this struct need to by synced with on disk state.
+// 容器挂载的volume信息
 type MountPoint struct {
 	// Source is the source path of the mount.
 	// E.g. `mount --bind /foo /bar`, `/foo` is the `Source`.

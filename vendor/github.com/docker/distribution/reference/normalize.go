@@ -171,13 +171,17 @@ func TagNameOnly(ref Named) Named {
 // ParseAnyReference parses a reference string as a possible identifier,
 // full digest, or familiar name.
 func ParseAnyReference(ref string) (Reference, error) {
+	// ref是镜像的64位digest
 	if ok := anchoredIdentifierRegexp.MatchString(ref); ok {
 		return digestReference("sha256:" + ref), nil
 	}
+
+	// ref是其他算法生成的镜像digest
 	if dgst, err := digest.Parse(ref); err == nil {
 		return digestReference(dgst), nil
 	}
 
+	// ref是 镜像名:镜像tag
 	return ParseNormalizedNamed(ref)
 }
 

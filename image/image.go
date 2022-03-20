@@ -63,6 +63,7 @@ type V1Image struct {
 }
 
 // Image stores the image configuration
+// image config文件内容
 type Image struct {
 	V1Image
 	Parent     ID        `json:"parent,omitempty"` //nolint:govet

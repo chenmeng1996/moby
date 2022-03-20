@@ -8,6 +8,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 )
 
+// 只读层
 type roLayer struct {
 	chainID    ChainID
 	diffID     DiffID

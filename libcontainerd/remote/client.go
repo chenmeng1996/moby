@@ -41,7 +41,7 @@ import (
 const DockerContainerBundlePath = "com.docker/engine.bundle.path"
 
 type client struct {
-	client   *containerd.Client
+	client   *containerd.Client // containerd client
 	stateDir string
 	logger   *logrus.Entry
 	ns       string
@@ -88,6 +88,7 @@ func (c *client) Restore(ctx context.Context, id string, attachStdio libcontaine
 		err = wrapError(err)
 	}()
 
+	// 与containerd rpc通信，查询容器信息
 	ctr, err := c.client.LoadContainer(ctx, id)
 	if err != nil {
 		return false, -1, nil, errors.WithStack(wrapError(err))
@@ -102,16 +103,19 @@ func (c *client) Restore(ctx context.Context, id string, attachStdio libcontaine
 		}
 		return attachStdio(dio)
 	}
+	// 容器的task
 	t, err := ctr.Task(ctx, attachIO)
 	if err != nil && !containerderrors.IsNotFound(err) {
 		return false, -1, nil, errors.Wrap(wrapError(err), "error getting containerd task for container")
 	}
 
 	if t != nil {
+		// 容器状态
 		s, err := t.Status(ctx)
 		if err != nil {
 			return false, -1, nil, errors.Wrap(wrapError(err), "error getting task status")
 		}
+		// 容器是否alive
 		alive = s.Status != containerd.Stopped
 		pid = int(t.Pid())
 	}
@@ -127,6 +131,7 @@ func (c *client) Restore(ctx context.Context, id string, attachStdio libcontaine
 	}, nil
 }
 
+// Create 调用containerd，创建容器
 func (c *client) Create(ctx context.Context, id string, ociSpec *specs.Spec, shim string, runtimeOptions interface{}, opts ...containerd.NewContainerOpts) error {
 	bdir := c.bundleDir(id)
 	c.logger.WithField("bundle", bdir).WithField("root", ociSpec.Root.Path).Debug("bundle dir created")

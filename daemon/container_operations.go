@@ -526,6 +526,7 @@ func (daemon *Daemon) updateContainerNetworkSettings(container *container.Contai
 	}
 }
 
+// 为容器分配网络
 func (daemon *Daemon) allocateNetwork(container *container.Container) (retErr error) {
 	if daemon.netController == nil {
 		return nil
@@ -955,16 +956,20 @@ func (daemon *Daemon) tryDetachContainerFromClusterNetwork(network libnetwork.Ne
 	daemon.LogNetworkEventWithAttributes(network, "disconnect", attributes)
 }
 
+// 初始化容器网络
 func (daemon *Daemon) initializeNetworking(container *container.Container) error {
 	var err error
 
+	// bridge模式 或 container模式
 	if container.HostConfig.NetworkMode.IsContainer() {
 		// we need to get the hosts files from the container to join
+		// 本容器将要加入另一个容器的网络，查询另一个容器的实例
 		nc, err := daemon.getNetworkedContainer(container.ID, container.HostConfig.NetworkMode.ConnectedContainer())
 		if err != nil {
 			return err
 		}
 
+		// 本容器的网络配置参考另一个容器的网络
 		err = daemon.initializeNetworkingPaths(container, nc)
 		if err != nil {
 			return err
@@ -975,6 +980,7 @@ func (daemon *Daemon) initializeNetworking(container *container.Container) error
 		return nil
 	}
 
+	// host模式
 	if container.HostConfig.NetworkMode.IsHost() {
 		if container.Config.Hostname == "" {
 			container.Config.Hostname, err = os.Hostname()
@@ -984,6 +990,7 @@ func (daemon *Daemon) initializeNetworking(container *container.Container) error
 		}
 	}
 
+	// 为容器分配网络
 	if err := daemon.allocateNetwork(container); err != nil {
 		return err
 	}

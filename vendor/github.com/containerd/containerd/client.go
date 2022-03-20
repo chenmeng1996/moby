@@ -267,6 +267,7 @@ func (c *Client) Containers(ctx context.Context, filters ...string) ([]Container
 
 // NewContainer will create a new container in container with the provided id
 // the id must be unique within the namespace
+// 创建容器
 func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
 	ctx, done, err := c.WithLease(ctx)
 	if err != nil {
@@ -293,6 +294,7 @@ func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContain
 }
 
 // LoadContainer loads an existing container from metadata
+// 根据容器id，查询容器信息
 func (c *Client) LoadContainer(ctx context.Context, id string) (Container, error) {
 	r, err := c.ContainerService().Get(ctx, id)
 	if err != nil {

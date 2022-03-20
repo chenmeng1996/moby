@@ -45,7 +45,7 @@ type store struct {
 	lss       LayerGetReleaser
 	images    map[ID]*imageMeta
 	fs        StoreBackend
-	digestSet *digestset.Set
+	digestSet *digestset.Set // 镜像digest集合
 }
 
 // NewImageStore returns new store object for given set of layer stores
@@ -199,14 +199,17 @@ func (is *store) Search(term string) (ID, error) {
 	return IDFromDigest(dgst), nil
 }
 
+// Get 根据image digest查找image config
 func (is *store) Get(id ID) (*Image, error) {
 	// todo: Check if image is in images
 	// todo: Detect manual insertions and start using them
+	// 根据image id查找image config
 	config, err := is.fs.Get(id.Digest())
 	if err != nil {
 		return nil, err
 	}
 
+	// image config文件
 	img, err := NewFromJSON(config)
 	if err != nil {
 		return nil, err

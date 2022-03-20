@@ -19,7 +19,7 @@ type DigestWalkFunc func(id digest.Digest) error
 // StoreBackend provides interface for image.Store persistence
 type StoreBackend interface {
 	Walk(f DigestWalkFunc) error
-	Get(id digest.Digest) ([]byte, error)
+	Get(id digest.Digest) ([]byte, error) // 根据image digest查找image config
 	Set(data []byte) (digest.Digest, error)
 	Delete(id digest.Digest) error
 	SetMetadata(id digest.Digest, key string, data []byte) error
@@ -95,6 +95,7 @@ func (s *fs) Get(dgst digest.Digest) ([]byte, error) {
 }
 
 func (s *fs) get(dgst digest.Digest) ([]byte, error) {
+	// 从 image/overlay2/content目录，根据image id查找image config
 	content, err := ioutil.ReadFile(s.contentFile(dgst))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get digest %s", dgst)

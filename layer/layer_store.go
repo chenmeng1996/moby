@@ -37,7 +37,7 @@ type layerStore struct {
 	layerMap map[ChainID]*roLayer
 	layerL   sync.Mutex
 
-	mounts map[string]*mountedLayer
+	mounts map[string]*mountedLayer // key: 容器id，value：容器的读写层
 	mountL sync.Mutex
 
 	// protect *RWLayer() methods from operating on the same name/id
@@ -60,6 +60,7 @@ type StoreOptions struct {
 
 // NewStoreFromOptions creates a new Store instance
 func NewStoreFromOptions(options StoreOptions) (Store, error) {
+	// 存储驱动
 	driver, err := graphdriver.New(options.GraphDriver, options.PluginGetter, graphdriver.Options{
 		Root:                options.Root,
 		DriverOptions:       options.GraphDriverOptions,
@@ -538,6 +539,7 @@ func (ls *layerStore) CreateRWLayer(name string, parent ChainID, opts *CreateRWL
 		defer func() {
 			if err != nil {
 				ls.layerL.Lock()
+				// ？
 				ls.releaseLayer(p)
 				ls.layerL.Unlock()
 			}
@@ -553,10 +555,12 @@ func (ls *layerStore) CreateRWLayer(name string, parent ChainID, opts *CreateRWL
 	}
 
 	if initFunc != nil {
+		// 在只读层的顶层，为容器创建init层
 		pid, err = ls.initMount(m.mountID, pid, mountLabel, initFunc, storageOpt)
 		if err != nil {
 			return
 		}
+		// init层的cache-id，是只读层的顶层的chainID + init
 		m.initID = pid
 	}
 
@@ -564,13 +568,16 @@ func (ls *layerStore) CreateRWLayer(name string, parent ChainID, opts *CreateRWL
 		StorageOpt: storageOpt,
 	}
 
+	// 在init层之上，为容器创建读写层
 	if err = ls.driver.CreateReadWrite(m.mountID, pid, createOpts); err != nil {
 		return
 	}
+	// ？
 	if err = ls.saveMount(m); err != nil {
 		return
 	}
 
+	// 返回容器的读写层
 	return m.getReference(), nil
 }
 
@@ -678,6 +685,7 @@ func (ls *layerStore) saveMount(mount *mountedLayer) error {
 	return nil
 }
 
+// 为容器创建init层
 func (ls *layerStore) initMount(graphID, parent, mountLabel string, initFunc MountInit, storageOpt map[string]string) (string, error) {
 	// Use "<graph-id>-init" to maintain compatibility with graph drivers
 	// which are expecting this layer with this special name. If all

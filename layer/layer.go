@@ -188,7 +188,7 @@ type Store interface {
 	Map() map[ChainID]Layer
 	Release(Layer) ([]Metadata, error)
 
-	CreateRWLayer(id string, parent ChainID, opts *CreateRWLayerOpts) (RWLayer, error)
+	CreateRWLayer(id string, parent ChainID, opts *CreateRWLayerOpts) (RWLayer, error) // 为容器创建读写层
 	GetRWLayer(id string) (RWLayer, error)
 	GetMountID(id string) (string, error)
 	ReleaseRWLayer(RWLayer) ([]Metadata, error)

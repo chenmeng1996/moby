@@ -20,6 +20,7 @@ import (
 // is returned if the container is not found, or if the remove
 // fails. If the remove succeeds, the container name is released, and
 // network links are removed.
+// 从磁盘上删除容器
 func (daemon *Daemon) ContainerRm(name string, config *types.ContainerRmConfig) error {
 	start := time.Now()
 	container, err := daemon.GetContainer(name)

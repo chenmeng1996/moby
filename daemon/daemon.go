@@ -84,12 +84,12 @@ var (
 // Daemon holds information about the Docker daemon.
 type Daemon struct {
 	ID                    string
-	repository            string
-	containers            container.Store
-	containersReplica     container.ViewDB
+	repository            string           // 容器信息所在目录。/var/lib/docker/containers
+	containers            container.Store  // 存储可用容器的信息
+	containersReplica     container.ViewDB // 在内存存储所有容器信息
 	execCommands          *exec.Store
 	imageService          *images.ImageService
-	idIndex               *truncindex.TruncIndex
+	idIndex               *truncindex.TruncIndex // 存储可用容器的id
 	configStore           *config.Config
 	statsCollector        *stats.Collector
 	defaultLogConfig      containertypes.LogConfig
@@ -207,6 +207,7 @@ func (daemon *Daemon) RegistryHosts() docker.RegistryHosts {
 	return resolver.NewRegistryConfig(m)
 }
 
+// docker daemon启动时，调用此方法，将所有容器信息加载到内存
 func (daemon *Daemon) restore() error {
 	var mapLock sync.Mutex
 	containers := make(map[string]*container.Container)
@@ -229,6 +230,7 @@ func (daemon *Daemon) restore() error {
 	var group sync.WaitGroup
 	sem := semaphore.NewWeighted(int64(parallelLimit))
 
+	// 查找所有容器
 	for _, v := range dir {
 		group.Add(1)
 		go func(id string) {
@@ -248,7 +250,9 @@ func (daemon *Daemon) restore() error {
 				return
 			}
 			// Ignore the container if it does not support the current driver being used by the graph
+			// 检查容器和docker当前的graphDriver
 			if (c.Driver == "" && daemon.graphDriver == "aufs") || c.Driver == daemon.graphDriver {
+				// 容器的读写层
 				rwlayer, err := daemon.imageService.GetLayerByID(c.ID)
 				if err != nil {
 					log.WithError(err).Error("failed to load container mount")
@@ -283,6 +287,7 @@ func (daemon *Daemon) restore() error {
 
 			log := logrus.WithField("container", c.ID)
 
+			// 容器信息加载到内存
 			if err := daemon.registerName(c); err != nil {
 				log.WithError(err).Errorf("failed to register container name: %s", c.Name)
 				mapLock.Lock()
@@ -311,6 +316,7 @@ func (daemon *Daemon) restore() error {
 			log := logrus.WithField("container", c.ID)
 
 			daemon.backportMountSpec(c)
+			// 容器信息落盘（存储到磁盘和内存）
 			if err := daemon.checkpointAndSave(c); err != nil {
 				log.WithError(err).Error("error saving backported mountspec to disk")
 			}
@@ -335,6 +341,7 @@ func (daemon *Daemon) restore() error {
 				process  libcontainerdtypes.Process
 			)
 
+			// 查询containerd，获取容器状态
 			alive, _, process, err = daemon.containerd.Restore(context.Background(), c.ID, c.InitializeStdio)
 			if err != nil && !errdefs.IsNotFound(err) {
 				logger(c).WithError(err).Error("failed to restore container with containerd")
@@ -346,6 +353,7 @@ func (daemon *Daemon) restore() error {
 				// If process is nil then the above `containerd.Restore` returned an errdefs.NotFoundError,
 				// and docker's view of the container state will be updated accorrdingly via SetStopped further down.
 				if process != nil {
+					// 删除not alive的容器
 					logger(c).Debug("cleaning up dead container process")
 					ec, exitedAt, err = process.Delete(context.Background())
 					if err != nil && !errdefs.IsNotFound(err) {
@@ -354,6 +362,7 @@ func (daemon *Daemon) restore() error {
 					}
 				}
 			} else if !daemon.configStore.LiveRestoreEnabled {
+				// 如果没有开启容器恢复，就将还alive的容器停止
 				logger(c).Debug("shutting down container considered alive by containerd")
 				if err := daemon.shutdownContainer(c); err != nil && !errdefs.IsNotFound(err) {
 					log.WithError(err).Error("error shutting down container")
@@ -362,6 +371,7 @@ func (daemon *Daemon) restore() error {
 				c.ResetRestartManager(false)
 			}
 
+			// 将最新的容器信息同步到磁盘
 			if c.IsRunning() || c.IsPaused() {
 				logger(c).Debug("syncing container on disk state with real state")
 
@@ -440,6 +450,8 @@ func (daemon *Daemon) restore() error {
 			// not initialized yet. We will start
 			// it after the cluster is
 			// initialized.
+
+			// 需要重启的容器，需要删除的容器
 			if daemon.configStore.AutoRestart && c.ShouldRestart() && !c.NetworkSettings.HasSwarmEndpoint && c.HasBeenStartedBefore {
 				mapLock.Lock()
 				restartContainers[c] = make(chan struct{})
@@ -495,6 +507,7 @@ func (daemon *Daemon) restore() error {
 	}
 	group.Wait()
 
+	// 重启容器
 	for c, notifier := range restartContainers {
 		group.Add(1)
 		go func(c *container.Container, chNotify chan struct{}) {
@@ -521,6 +534,7 @@ func (daemon *Daemon) restore() error {
 
 			// Make sure networks are available before starting
 			daemon.waitForNetworks(c)
+			// 启动容器
 			if err := daemon.containerStart(c, "", "", true); err != nil {
 				log.WithError(err).Error("failed to start container")
 			}
@@ -537,6 +551,7 @@ func (daemon *Daemon) restore() error {
 		go func(cid string) {
 			_ = sem.Acquire(context.Background(), 1)
 
+			// 删除容器
 			if err := daemon.ContainerRm(cid, &types.ContainerRmConfig{ForceRemove: true, RemoveVolume: true}); err != nil {
 				logrus.WithField("container", cid).WithError(err).Error("failed to remove container")
 			}
@@ -567,7 +582,7 @@ func (daemon *Daemon) restore() error {
 		group.Add(1)
 		go func(c *container.Container) {
 			_ = sem.Acquire(context.Background(), 1)
-
+			// 容器的volume信息载入内存
 			if err := daemon.prepareMountPoints(c); err != nil {
 				logrus.WithField("container", c.ID).WithError(err).Error("failed to prepare mountpoints for container")
 			}
@@ -847,6 +862,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		logrus.Errorf(err.Error())
 	}
 
+	// 容器信息所在目录
 	daemonRepo := filepath.Join(config.Root, "containers")
 	if err := idtools.MkdirAllAndChown(daemonRepo, 0701, idtools.CurrentIdentity()); err != nil {
 		return nil, err
@@ -925,6 +941,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 	}
 	if config.ContainerdAddr != "" {
+		// containerd的client，通过addr通信。
 		d.containerdCli, err = containerd.New(config.ContainerdAddr, containerd.WithDefaultNamespace(config.ContainerdNamespace), containerd.WithDialOpts(gopts), containerd.WithTimeout(60*time.Second))
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to dial %q", config.ContainerdAddr)
@@ -973,6 +990,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		return nil, err
 	}
 
+	// 镜像层存储
 	layerStore, err := layer.NewStoreFromOptions(layer.StoreOptions{
 		Root:                      config.Root,
 		MetadataStorePathTemplate: filepath.Join(config.Root, "image", "%s", "layerdb"),
@@ -987,6 +1005,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		return nil, err
 	}
 
+	// 镜像存储的存储驱动，默认为overlay2
 	// As layerstore initialization may set the driver
 	d.graphDriver = layerStore.DriverName()
 
@@ -997,16 +1016,19 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	}
 
 	imageRoot := filepath.Join(config.Root, "image", d.graphDriver)
+	// 基于文件系统的镜像文件存储，/var/lib/docker/image/overlay2
 	ifs, err := image.NewFSStoreBackend(filepath.Join(imageRoot, "imagedb"))
 	if err != nil {
 		return nil, err
 	}
 
+	// 镜像存储（包括镜像文件管理、镜像层存储）
 	imageStore, err := image.NewImageStore(ifs, layerStore)
 	if err != nil {
 		return nil, err
 	}
 
+	// 卷管理
 	d.volumes, err = volumesservice.NewVolumeService(config.Root, d.PluginStore, rootIDs, d)
 	if err != nil {
 		return nil, err
@@ -1033,12 +1055,15 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 	// operating systems, the list of graphdrivers available isn't user configurable.
 	// For backwards compatibility, we just put it under the windowsfilter
 	// directory regardless.
+
+	// 镜像名和镜像id的映射关系，存储在repositories.json文件中
 	refStoreLocation := filepath.Join(imageRoot, `repositories.json`)
 	rs, err := refstore.NewReferenceStore(refStoreLocation)
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't create reference store repository: %s", err)
 	}
 
+	// 基于文件系统的元数据存储，image/overlay2/distribution
 	distributionMetadataStore, err := dmetadata.NewFSMetadataStore(filepath.Join(imageRoot, "distribution"))
 	if err != nil {
 		return nil, err
@@ -1112,6 +1137,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 
 	go d.execCommandGC()
 
+	// 调用containerd的client
 	d.containerd, err = libcontainerd.NewClient(ctx, d.containerdCli, filepath.Join(config.ExecRoot, "containerd"), config.ContainerdNamespace, d)
 	if err != nil {
 		return nil, err
